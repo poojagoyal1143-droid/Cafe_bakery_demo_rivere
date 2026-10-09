@@ -3,10 +3,10 @@
 /**
  * Riverè Cafe & Bakery - Scene 3: The Parchment Flipbook Menu
  * File: components/menu/ParchmentFlipbook.tsx
- * Description: Interactive 3D French bakery parchment menu with page-turning physics, category bookmarks, and item preorder modal.
+ * Description: Interactive 3D French bakery parchment menu with organic page-turn physics, paper rustle SFX, dog-ear corner teasers, and mobile fallback.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Image from 'next/image';
 import { gsap } from 'gsap';
 import {
@@ -37,11 +37,42 @@ interface MenuChapter {
   items: MenuItem[];
 }
 
+// Synthesize a soft acoustic paper turn flutter sound effect
+const playPaperRustleSFX = () => {
+  try {
+    const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtxClass) return;
+    const ctx = new AudioCtxClass();
+    const bufferSize = ctx.sampleRate * 0.15; // 150ms rustle
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3));
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.setValueAtTime(1800, ctx.currentTime);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+  } catch {
+    // Silently ignore browser gesture restrictions
+  }
+};
+
 export function ParchmentFlipbook() {
   const containerRef = useRef<HTMLDivElement>(null);
   const bookSpreadRef = useRef<HTMLDivElement>(null);
   const leftPageRef = useRef<HTMLDivElement>(null);
   const rightPageRef = useRef<HTMLDivElement>(null);
+  const activeTlRef = useRef<gsap.core.Timeline | null>(null);
 
   const [activeSpreadIndex, setActiveSpreadIndex] = useState(0);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
@@ -50,6 +81,7 @@ export function ParchmentFlipbook() {
   const [showOrderToast, setShowOrderToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [isFlipping, setIsFlipping] = useState(false);
+  const [isCornerHovered, setIsCornerHovered] = useState<'left' | 'right' | null>(null);
 
   // Group items into 4 distinct spreads/chapters
   const chapters: MenuChapter[] = [
@@ -89,8 +121,17 @@ export function ParchmentFlipbook() {
 
   const currentChapter = chapters[activeSpreadIndex] || chapters[0];
 
+  // Clean up any active GSAP timelines on unmount
+  useEffect(() => {
+    return () => {
+      if (activeTlRef.current) {
+        activeTlRef.current.kill();
+      }
+    };
+  }, []);
+
   // ---------------------------------------------------------------------------
-  // 1. GSAP 3D PAGE TURN ANIMATION
+  // 1. ORGANIC 3D SKEUOMORPHIC PAGE-TURN PHYSICS (GSAP TIMELINE)
   // ---------------------------------------------------------------------------
   const flipToSpread = (targetIndex: number) => {
     if (targetIndex === activeSpreadIndex || isFlipping || targetIndex < 0 || targetIndex >= chapters.length) {
@@ -98,11 +139,14 @@ export function ParchmentFlipbook() {
     }
 
     setIsFlipping(true);
+    playPaperRustleSFX();
 
     const isForward = targetIndex > activeSpreadIndex;
     const flippingPage = isForward ? rightPageRef.current : leftPageRef.current;
+    const isMobile = window.innerWidth < 768;
 
-    if (!flippingPage) {
+    if (!flippingPage || isMobile) {
+      // Mobile fallback: crisp slide animation
       setActiveSpreadIndex(targetIndex);
       setIsFlipping(false);
       return;
@@ -112,28 +156,73 @@ export function ParchmentFlipbook() {
       const tl = gsap.timeline({
         onComplete: () => {
           setActiveSpreadIndex(targetIndex);
-          gsap.set(flippingPage, { rotateY: 0, opacity: 1, boxShadow: 'none' });
+          gsap.set(flippingPage, {
+            rotateY: 0,
+            translateZ: 0,
+            skewY: 0,
+            opacity: 1,
+            boxShadow: 'none',
+          });
           setIsFlipping(false);
         },
       });
 
+      activeTlRef.current = tl;
+
+      // Phase 1: Lift & Arc (0% to 50%)
       tl.to(flippingPage, {
         rotateY: isForward ? -90 : 90,
-        duration: 0.4,
-        ease: 'power2.inOut',
+        translateZ: 40,
+        skewY: isForward ? -3 : 3,
+        duration: 0.425,
+        ease: 'power2.in',
         transformOrigin: isForward ? 'left center' : 'right center',
-        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
-      }).to(flippingPage, {
-        rotateY: 0,
-        duration: 0.4,
-        ease: 'power2.inOut',
-        boxShadow: '0 0 0 rgba(0, 0, 0, 0)',
-      });
+        boxShadow: '0 20px 40px rgba(0, 0, 0, 0.45)',
+      })
+        // Phase 2: Settle & Flatten (50% to 100%)
+        .to(flippingPage, {
+          rotateY: 0,
+          translateZ: 0,
+          skewY: 0,
+          duration: 0.425,
+          ease: 'power2.out',
+          boxShadow: '0 0 0 rgba(0, 0, 0, 0)',
+        });
     }, bookSpreadRef);
   };
 
   // ---------------------------------------------------------------------------
-  // 2. PREORDER MODAL & TOAST HANDLERS
+  // 2. CORNER TEASER HOVER HANDLERS
+  // ---------------------------------------------------------------------------
+  const handleCornerHover = (side: 'left' | 'right', entering: boolean) => {
+    if (isFlipping) return;
+    setIsCornerHovered(entering ? side : null);
+
+    const targetRef = side === 'right' ? rightPageRef.current : leftPageRef.current;
+    if (!targetRef) return;
+
+    if (entering) {
+      gsap.to(targetRef, {
+        rotateY: side === 'right' ? -10 : 10,
+        translateZ: 12,
+        duration: 0.3,
+        ease: 'power1.out',
+        transformOrigin: side === 'right' ? 'left center' : 'right center',
+        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
+      });
+    } else {
+      gsap.to(targetRef, {
+        rotateY: 0,
+        translateZ: 0,
+        duration: 0.3,
+        ease: 'power1.out',
+        boxShadow: 'none',
+      });
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // 3. PREORDER MODAL & TOAST HANDLERS
   // ---------------------------------------------------------------------------
   const handleAddToCart = (item: MenuItem) => {
     setPreorderCount((prev) => prev + orderQuantity);
@@ -171,7 +260,7 @@ export function ParchmentFlipbook() {
         </h2>
 
         <p className="text-xs sm:text-sm text-stone-300 font-light tracking-wide max-w-xl mx-auto">
-          Explore our daily baking selection. Click any item to view ingredient breakdown, allergen profile, and reserve for pickup.
+          Explore our daily baking selection. Hover page corners to peel, or click any item to view details and reserve for pickup.
         </p>
 
         {/* Preorder Shopping Bag Counter Indicator */}
@@ -208,8 +297,8 @@ export function ParchmentFlipbook() {
         })}
       </nav>
 
-      {/* 3. PARCHMENT FLIPBOOK SPREAD CONTAINER */}
-      <div className="relative w-full max-w-5xl z-10 perspective-1400">
+      {/* 3. PARCHMENT FLIPBOOK SPREAD CONTAINER (PERSPECTIVE 2200PX) */}
+      <div className="relative w-full max-w-5xl z-10 [perspective:2200px]">
         {/* Leather/Linen Book Binding Frame */}
         <div
           ref={bookSpreadRef}
@@ -221,15 +310,22 @@ export function ParchmentFlipbook() {
           }}
         >
           {/* Inner Parchment Double Page Spread */}
-          <div className="relative w-full bg-[#f4eedd] text-stone-900 rounded-xl p-4 sm:p-8 md:p-10 shadow-inner grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 min-h-[560px] border border-amber-800/30">
+          <div className="relative w-full bg-[#f4eedd] text-stone-900 rounded-xl p-4 sm:p-8 md:p-10 shadow-inner grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 min-h-[560px] border border-amber-800/30 transform-style-3d">
             {/* Center Spine Fold Shadow */}
             <div className="hidden md:block absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-12 bg-gradient-to-r from-stone-900/20 via-stone-900/40 to-stone-900/20 pointer-events-none z-20" />
 
-            {/* LEFT PAGE (Category Overview & Story) */}
+            {/* LEFT PAGE (Verso Chapter Overview) */}
             <div
               ref={leftPageRef}
-              className="flex flex-col justify-between border-b md:border-b-0 md:border-r border-amber-900/20 pb-6 md:pb-0 md:pr-8 transform-style-3d"
-              style={{ willChange: 'transform', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
+              className="relative flex flex-col justify-between border-b md:border-b-0 md:border-r border-amber-900/20 pb-6 md:pb-0 md:pr-8 transform-style-3d"
+              style={{
+                willChange: 'transform',
+                transform: 'translate3d(0, 0, 0)',
+                backfaceVisibility: 'hidden',
+                transformOrigin: 'right center',
+              }}
+              onMouseEnter={() => handleCornerHover('left', true)}
+              onMouseLeave={() => handleCornerHover('left', false)}
             >
               <div>
                 <div className="flex items-center justify-between mb-4 border-b border-amber-900/20 pb-3">
@@ -284,18 +380,35 @@ export function ParchmentFlipbook() {
                 )}
               </div>
 
-              <div className="text-center pt-2">
+              {/* Bottom Left Dog-Ear Teaser Cue */}
+              <div className="flex items-center justify-between pt-2">
                 <span className="text-[10px] uppercase tracking-widest text-amber-900/60 font-medium">
                   Riverè Artisan Boulangerie &bull; Maison Fondée 2026
                 </span>
+
+                {activeSpreadIndex > 0 && (
+                  <span
+                    onClick={() => flipToSpread(activeSpreadIndex - 1)}
+                    className="cursor-pointer text-[9px] uppercase tracking-wider text-amber-800 font-bold bg-amber-900/10 px-2 py-1 rounded hover:bg-amber-900/20 transition-colors hidden md:inline-block"
+                  >
+                    &laquo; Turn Back
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* RIGHT PAGE (Menu Item Line Items) */}
+            {/* RIGHT PAGE (Recto Line Items) */}
             <div
               ref={rightPageRef}
-              className="flex flex-col justify-between md:pl-4 transform-style-3d"
-              style={{ willChange: 'transform', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
+              className="relative flex flex-col justify-between md:pl-4 transform-style-3d"
+              style={{
+                willChange: 'transform',
+                transform: 'translate3d(0, 0, 0)',
+                backfaceVisibility: 'hidden',
+                transformOrigin: 'left center',
+              }}
+              onMouseEnter={() => handleCornerHover('right', true)}
+              onMouseLeave={() => handleCornerHover('right', false)}
             >
               <div>
                 <div className="flex items-center justify-between mb-4 border-b border-amber-900/20 pb-3">
