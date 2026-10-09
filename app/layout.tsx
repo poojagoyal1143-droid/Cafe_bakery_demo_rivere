@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { HeaderNav } from '@/components/navigation/HeaderNav';
 import { SmoothScrollProvider } from '@/components/providers/SmoothScroll';
+import { SoundscapeManager } from '@/components/audio/SoundscapeManager';
 
 export const metadata: Metadata = {
   title: 'Riverè | Artisan Bakery & Café',
@@ -28,10 +29,12 @@ export default function RootLayout({
       <body className="bg-stone-950 text-stone-100 antialiased selection:bg-amber-500 selection:text-stone-950">
         <SmoothScrollProvider>
           <HeaderNav />
+          <SoundscapeManager />
           {children}
         </SmoothScrollProvider>
       </body>
     </html>
   );
 }
+
 
