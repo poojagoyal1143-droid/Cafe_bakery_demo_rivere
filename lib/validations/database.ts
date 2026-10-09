@@ -30,6 +30,14 @@ export const ReservationStatusSchema = z.enum([
   'completed',
 ]);
 
+export const PaymentStatusSchema = z.enum([
+  'pending',
+  'processing',
+  'paid',
+  'failed',
+  'refunded',
+]);
+
 // ==============================================================================
 // 2. MENU ITEM VALIDATION SCHEMAS
 // ==============================================================================
@@ -225,6 +233,51 @@ export const ReservationSchema = ReservationInsertSchema.extend({
   updated_at: z.string(),
 });
 
+// ==============================================================================
+// 6. ORDER PREORDER CHECKOUT SCHEMAS
+// ==============================================================================
+export const OrderItemSchema = z.object({
+  menu_item_id: z.string().uuid({ message: 'Invalid menu item ID.' }),
+  title: z.string().min(1, { message: 'Item title is required.' }),
+  quantity: z.number().int().positive({ message: 'Quantity must be at least 1.' }),
+  unit_price: z.number().min(0, { message: 'Unit price cannot be negative.' }),
+});
+
+export const PreorderCheckoutSchema = z.object({
+  customer_name: z
+    .string()
+    .trim()
+    .min(2, { message: 'Name must be at least 2 characters.' })
+    .max(80, { message: 'Name cannot exceed 80 characters.' }),
+  customer_email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email({ message: 'Please provide a valid email address.' }),
+  customer_phone: z
+    .string()
+    .trim()
+    .regex(/^[+]*[(]?[0-9]{1,4}[)]?[-\s./0-9]{6,15}$/, {
+      message: 'Please enter a valid phone number.',
+    })
+    .min(7)
+    .max(20),
+  pickup_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'Pickup date must be YYYY-MM-DD.' }),
+  pickup_time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):([0-5]\d)(:([0-5]\d))?$/, {
+      message: 'Pickup time must be HH:MM.',
+    }),
+  items: z
+    .array(OrderItemSchema)
+    .min(1, { message: 'Preorder must contain at least one menu item.' }),
+  special_instructions: z.string().max(300).nullable().optional(),
+});
+
 export type ReservationInsertInput = z.infer<typeof ReservationInsertSchema>;
 export type MenuItemInsertInput = z.infer<typeof MenuItemInsertSchema>;
 export type RecipeInsertInput = z.infer<typeof RecipeInsertSchema>;
+export type PreorderCheckoutInput = z.infer<typeof PreorderCheckoutSchema>;
+export type OrderItemInput = z.infer<typeof OrderItemSchema>;
