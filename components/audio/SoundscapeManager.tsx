@@ -1,31 +1,27 @@
 'use client';
 
 /**
- * Riverè Cafe & Bakery - Spatial Soundscape Manager & Web Audio Synthesizer
+ * Riverè Cafe & Bakery - Spatial Soundscape Manager & French Cafe Piano Audio
  * File: components/audio/SoundscapeManager.tsx
- * Description: Procedural 3D Web Audio API engine generating ambient rain, fireplace crackle, and shop door chimes with dynamic scroll crossfading.
+ * Description: Relaxing French bakery solo piano music (Erik Satie style) with Web Audio fallback synthesizer, 1.5s fade-in, and brass shop door chime SFX.
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Volume2, VolumeX, Sparkles } from 'lucide-react';
+import { Volume2, VolumeX, Music } from 'lucide-react';
 
 interface SoundscapeManagerProps {
   scrollProgress?: number;
 }
 
-// Global reference for external trigger (e.g. door click chime)
+// Public Domain French Vintage Solo Piano Track (Gymnopédie No. 1)
+const PIANO_AUDIO_URL = 'https://upload.wikimedia.org/wikipedia/commons/3/34/Erik_Satie_-_gymnopedie_no_1.mp3';
+
+// Global references for external triggers
 let globalDoorChimeTrigger: (() => void) | null = null;
-let globalScrollProgressUpdater: ((progress: number) => void) | null = null;
 
 export function triggerDoorChime() {
   if (globalDoorChimeTrigger) {
     globalDoorChimeTrigger();
-  }
-}
-
-export function updateSoundscapeScroll(progress: number) {
-  if (globalScrollProgressUpdater) {
-    globalScrollProgressUpdater(progress);
   }
 }
 
@@ -34,20 +30,17 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
   const [isAudioInitialized, setIsAudioInitialized] = useState<boolean>(false);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
-  
-  // Gain Nodes
+  const audioElemRef = useRef<HTMLAudioElement | null>(null);
+  const mediaElementSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const pianoGainNodeRef = useRef<GainNode | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
-  const rainGainRef = useRef<GainNode | null>(null);
-  const crackleGainRef = useRef<GainNode | null>(null);
 
-  // Noise Generators & Osc References
-  const rainSourceRef = useRef<AudioNode | null>(null);
-  const crackleTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  const lastChimeProgressRef = useRef<number>(0);
+  const isSynthesizerFallbackRef = useRef<boolean>(false);
+  const synthTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const fadeIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // ---------------------------------------------------------------------------
-  // 1. WEB AUDIO SYNTHESIS SETUP (RAIN & FIRE CRACKLE & BRASS CHIME)
+  // 1. INITIALIZE WEB AUDIO ENGINE & PIANO AUDIO TRACK
   // ---------------------------------------------------------------------------
   const initAudioEngine = useCallback(() => {
     if (audioCtxRef.current) return audioCtxRef.current;
@@ -57,81 +50,34 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
       const ctx = new AudioCtxClass();
       audioCtxRef.current = ctx;
 
-      // Master Gain Node
+      // Master Gain
       const masterGain = ctx.createGain();
-      masterGain.gain.setValueAtTime(0.5, ctx.currentTime);
+      masterGain.gain.setValueAtTime(1.0, ctx.currentTime);
       masterGain.connect(ctx.destination);
       masterGainRef.current = masterGain;
 
-      // Rain Gain Node
-      const rainGain = ctx.createGain();
-      rainGain.gain.setValueAtTime(0.8, ctx.currentTime);
-      rainGain.connect(masterGain);
-      rainGainRef.current = rainGain;
+      // Piano Gain (Default 0.30)
+      const pianoGain = ctx.createGain();
+      pianoGain.gain.setValueAtTime(0, ctx.currentTime); // Starts at 0 for fade-in
+      pianoGain.connect(masterGain);
+      pianoGainNodeRef.current = pianoGain;
 
-      // Fire Crackle Gain Node
-      const crackleGain = ctx.createGain();
-      crackleGain.gain.setValueAtTime(0.0, ctx.currentTime);
-      crackleGain.connect(masterGain);
-      crackleGainRef.current = crackleGain;
+      // Create HTML5 Audio Element for Piano MP3
+      const audio = new Audio();
+      audio.src = PIANO_AUDIO_URL;
+      audio.crossOrigin = 'anonymous';
+      audio.loop = true;
+      audio.volume = 1.0; // Volume controlled via Web Audio GainNode
+      audioElemRef.current = audio;
 
-      // A. Create Rain Sound (Filtered Pink/White Noise Buffer)
-      const bufferSize = ctx.sampleRate * 2;
-      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const output = noiseBuffer.getChannelData(0);
-      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-
-      for (let i = 0; i < bufferSize; i++) {
-        const white = Math.random() * 2 - 1;
-        b0 = 0.99886 * b0 + white * 0.0555179;
-        b1 = 0.99332 * b1 + white * 0.0750759;
-        b2 = 0.96900 * b2 + white * 0.1538520;
-        b3 = 0.86650 * b3 + white * 0.3104856;
-        b4 = 0.55000 * b4 + white * 0.5329522;
-        b5 = -0.7616 * b5 - white * 0.0168980;
-        output[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
-        output[i] *= 0.11;
-        b6 = white * 0.115926;
+      try {
+        const source = ctx.createMediaElementSource(audio);
+        source.connect(pianoGain);
+        mediaElementSourceRef.current = source;
+      } catch (err) {
+        console.warn('[Riverè Audio]: MediaElementAudioSource cross-origin fallback active.', err);
       }
 
-      const whiteNoise = ctx.createBufferSource();
-      whiteNoise.buffer = noiseBuffer;
-      whiteNoise.loop = true;
-
-      const rainFilter = ctx.createBiquadFilter();
-      rainFilter.type = 'lowpass';
-      rainFilter.frequency.setValueAtTime(1200, ctx.currentTime);
-
-      whiteNoise.connect(rainFilter);
-      rainFilter.connect(rainGain);
-      whiteNoise.start();
-      rainSourceRef.current = whiteNoise;
-
-      // B. Create Fireplace Crackle (Procedural Random Impulses)
-      const playCracklePop = () => {
-        if (!audioCtxRef.current || !crackleGainRef.current) return;
-        const now = audioCtxRef.current.currentTime;
-        const osc = audioCtxRef.current.createOscillator();
-        const popGain = audioCtxRef.current.createGain();
-
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(100 + Math.random() * 300, now);
-        osc.frequency.exponentialRampToValueAtTime(30, now + 0.04);
-
-        popGain.gain.setValueAtTime(0.08 + Math.random() * 0.12, now);
-        popGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-
-        osc.connect(popGain);
-        popGain.connect(crackleGainRef.current);
-
-        osc.start(now);
-        osc.stop(now + 0.05);
-
-        const nextDelay = Math.random() * 180 + 40;
-        crackleTimerRef.current = setTimeout(playCracklePop, nextDelay);
-      };
-
-      playCracklePop();
       setIsAudioInitialized(true);
       return ctx;
     } catch (err) {
@@ -151,7 +97,7 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
     if (!ctx || !masterGainRef.current) return;
 
     if (ctx.state === 'suspended') {
-      ctx.resume().then(() => console.log('[Audio] Initialized & Playing'));
+      ctx.resume().then(() => console.log('[Audio] Door Chime Resumed AudioContext'));
     }
 
     const now = ctx.currentTime;
@@ -174,7 +120,6 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
     });
   }, [initAudioEngine]);
 
-  // Register global triggers
   useEffect(() => {
     globalDoorChimeTrigger = playBrassDoorChime;
     return () => {
@@ -183,45 +128,76 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
   }, [playBrassDoorChime]);
 
   // ---------------------------------------------------------------------------
-  // 3. DYNAMIC SCROLL CROSSFADE LOGIC
+  // 3. PROCEDURAL VINTAGE FRENCH PIANO SYNTHESIZER FALLBACK
   // ---------------------------------------------------------------------------
-  const handleScrollProgress = useCallback((progress: number) => {
-    if (!audioCtxRef.current || !rainGainRef.current || !crackleGainRef.current) return;
-    const ctx = audioCtxRef.current;
-    const now = ctx.currentTime;
+  const startPianoSynthFallback = useCallback(() => {
+    if (!audioCtxRef.current || !pianoGainNodeRef.current) return;
 
-    // Street section (0 to 0.7 scrub): Rain 100% -> 15%, Crackle 0% -> 85%
-    if (progress < 0.7) {
-      const rainVol = 0.8 * (1 - (progress / 0.7) * 0.85);
-      const crackleVol = (progress / 0.7) * 0.85;
+    // Gentle Erik Satie style chord progression (Dmaj7, Gmaj7, F#m7, Bm7)
+    const chords = [
+      [293.66, 370.0, 440.0, 554.37], // Dmaj7
+      [196.0, 246.94, 293.66, 370.0], // Gmaj7
+      [185.0, 220.0, 277.18, 370.0],  // F#m7
+      [246.94, 293.66, 370.0, 440.0], // Bm7
+    ];
 
-      rainGainRef.current.gain.setTargetAtTime(rainVol, now, 0.2);
-      crackleGainRef.current.gain.setTargetAtTime(crackleVol, now, 0.2);
-    } else {
-      // Threshold crossing (0.7 to 1.0)
-      rainGainRef.current.gain.setTargetAtTime(0.12, now, 0.2);
-      crackleGainRef.current.gain.setTargetAtTime(0.85, now, 0.2);
+    let chordIdx = 0;
 
-      // Trigger brass chime once on forward scroll threshold crossing
-      if (lastChimeProgressRef.current < 0.7 && progress >= 0.7) {
-        playBrassDoorChime();
-      }
-    }
+    const playNextChord = () => {
+      if (!audioCtxRef.current || !pianoGainNodeRef.current) return;
+      const ctx = audioCtxRef.current;
+      const now = ctx.currentTime;
+      const chord = chords[chordIdx % chords.length];
 
-    lastChimeProgressRef.current = progress;
-  }, [playBrassDoorChime]);
+      chord.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const noteGain = ctx.createGain();
 
-  useEffect(() => {
-    globalScrollProgressUpdater = handleScrollProgress;
-    handleScrollProgress(scrollProgress);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + i * 0.15);
 
-    return () => {
-      globalScrollProgressUpdater = null;
+        noteGain.gain.setValueAtTime(0.08, now + i * 0.15);
+        noteGain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.15 + 3.5);
+
+        osc.connect(noteGain);
+        noteGain.connect(pianoGainNodeRef.current!);
+
+        osc.start(now + i * 0.15);
+        osc.stop(now + i * 0.15 + 3.8);
+      });
+
+      chordIdx++;
+      synthTimerRef.current = setTimeout(playNextChord, 4200);
     };
-  }, [scrollProgress, handleScrollProgress]);
+
+    playNextChord();
+  }, []);
 
   // ---------------------------------------------------------------------------
-  // 4. BROWSER GESTURE POLICY & RESUME HANDLER
+  // 4. SMOOTH 1.5s FADE-IN & 1.0s FADE-OUT CONTROLS
+  // ---------------------------------------------------------------------------
+  const fadeInPiano = (ctx: AudioContext, targetVol = 0.3) => {
+    if (!pianoGainNodeRef.current) return;
+    const now = ctx.currentTime;
+    pianoGainNodeRef.current.gain.cancelScheduledValues(now);
+    pianoGainNodeRef.current.gain.setValueAtTime(pianoGainNodeRef.current.gain.value, now);
+    pianoGainNodeRef.current.gain.linearRampToValueAtTime(targetVol, now + 1.5);
+  };
+
+  const fadeOutPiano = (ctx: AudioContext, onComplete?: () => void) => {
+    if (!pianoGainNodeRef.current) return;
+    const now = ctx.currentTime;
+    pianoGainNodeRef.current.gain.cancelScheduledValues(now);
+    pianoGainNodeRef.current.gain.setValueAtTime(pianoGainNodeRef.current.gain.value, now);
+    pianoGainNodeRef.current.gain.linearRampToValueAtTime(0.0001, now + 1.0);
+
+    if (onComplete) {
+      setTimeout(onComplete, 1050);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // 5. AUDIO PLAYBACK TOGGLE & BROWSER GESTURE POLICY
   // ---------------------------------------------------------------------------
   const toggleAudio = async () => {
     let ctx = audioCtxRef.current;
@@ -229,61 +205,64 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
       ctx = initAudioEngine();
     }
 
-    if (ctx) {
-      try {
-        if (ctx.state === 'suspended') {
-          await ctx.resume();
-          setIsPlaying(true);
-          console.log('[Audio] Initialized & Playing');
-        } else if (isPlaying) {
-          await ctx.suspend();
-          setIsPlaying(false);
-        } else {
-          await ctx.resume();
-          setIsPlaying(true);
-          console.log('[Audio] Initialized & Playing');
-        }
-      } catch (err) {
-        console.warn('[Audio] Failed to toggle playback:', err);
+    if (!ctx) return;
+
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+
+    if (isPlaying) {
+      // Fade-out piano & pause
+      fadeOutPiano(ctx, () => {
+        if (audioElemRef.current) audioElemRef.current.pause();
+        if (synthTimerRef.current) clearTimeout(synthTimerRef.current);
+        setIsPlaying(false);
+      });
+    } else {
+      // Fade-in piano & play
+      fadeInPiano(ctx, 0.3);
+      if (audioElemRef.current) {
+        audioElemRef.current
+          .play()
+          .then(() => {
+            setIsPlaying(true);
+            console.log('[Audio] French Cafe Piano Initialized & Playing');
+          })
+          .catch((err) => {
+            console.warn('[Riverè Audio]: MP3 stream restricted, activating piano synthesizer fallback.', err);
+            isSynthesizerFallbackRef.current = true;
+            startPianoSynthFallback();
+            setIsPlaying(true);
+            console.log('[Audio] French Cafe Piano Synthesizer Initialized & Playing');
+          });
+      } else {
+        startPianoSynthFallback();
+        setIsPlaying(true);
+        console.log('[Audio] French Cafe Piano Synthesizer Initialized & Playing');
       }
     }
   };
 
-  // Pause audio when browser tab is hidden & handle gesture resume
+  // Tab Visibility Protection
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (document.hidden && audioCtxRef.current && audioCtxRef.current.state === 'running') {
-        await audioCtxRef.current.suspend();
+        if (pianoGainNodeRef.current) {
+          pianoGainNodeRef.current.gain.setValueAtTime(0, audioCtxRef.current.currentTime);
+        }
+        if (audioElemRef.current) audioElemRef.current.pause();
+        if (synthTimerRef.current) clearTimeout(synthTimerRef.current);
         setIsPlaying(false);
       }
     };
 
-    const handleFirstUserInteraction = async () => {
-      if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
-        try {
-          await audioCtxRef.current.resume();
-          setIsPlaying(true);
-          console.log('[Audio] Initialized & Playing');
-        } catch (err) {
-          console.warn('[Audio] First gesture resume caught:', err);
-        }
-      }
-    };
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('click', handleFirstUserInteraction, { once: true });
-    window.addEventListener('touchstart', handleFirstUserInteraction, { once: true });
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('click', handleFirstUserInteraction);
-      window.removeEventListener('touchstart', handleFirstUserInteraction);
-      if (crackleTimerRef.current) {
-        clearTimeout(crackleTimerRef.current);
-      }
-      if (audioCtxRef.current) {
-        audioCtxRef.current.close();
-      }
+      if (synthTimerRef.current) clearTimeout(synthTimerRef.current);
+      if (fadeIntervalRef.current) clearTimeout(fadeIntervalRef.current);
+      if (audioCtxRef.current) audioCtxRef.current.close();
     };
   }, []);
 
@@ -291,27 +270,27 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
     <div className="fixed top-24 right-6 z-40 select-none">
       <button
         onClick={toggleAudio}
-        className={`group px-3.5 py-2 rounded-full border backdrop-blur-xl transition-all duration-300 flex items-center gap-2.5 shadow-xl ${
+        className={`group px-4 py-2.5 rounded-full border backdrop-blur-xl transition-all duration-300 flex items-center gap-2.5 shadow-xl ${
           isPlaying
-            ? 'bg-amber-500/20 border-amber-500/50 text-amber-200 shadow-[0_0_20px_rgba(226,168,85,0.4)]'
+            ? 'bg-amber-500/20 border-amber-500/50 text-amber-200 shadow-[0_0_25px_rgba(226,168,85,0.4)] scale-105'
             : 'bg-stone-950/80 border-stone-800 text-stone-300 hover:text-amber-300 hover:border-amber-500/40'
         }`}
-        aria-label="Toggle Spatial Audio Soundscape"
+        aria-label="Toggle French Cafe Solo Piano Music"
       >
         {isPlaying ? (
           <>
-            <Volume2 className="w-4 h-4 text-amber-400 animate-pulse" />
+            <Music className="w-4 h-4 text-amber-400 animate-pulse" />
             <div className="flex items-end gap-0.5 h-3.5 px-0.5">
               <span className="w-0.5 bg-amber-400 rounded-full h-full animate-bounce [animation-delay:-0.3s]" />
               <span className="w-0.5 bg-amber-400 rounded-full h-3/4 animate-bounce [animation-delay:-0.15s]" />
               <span className="w-0.5 bg-amber-400 rounded-full h-full animate-bounce" />
             </div>
-            <span className="text-[10px] uppercase tracking-wider font-semibold">Soundscape On</span>
+            <span className="text-[10px] uppercase tracking-wider font-semibold">French Cafe Piano On</span>
           </>
         ) : (
           <>
             <VolumeX className="w-4 h-4 text-amber-400/80 group-hover:text-amber-400 transition-colors" />
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-stone-300">Enable Sound</span>
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-stone-300">Play French Piano</span>
           </>
         )}
       </button>
