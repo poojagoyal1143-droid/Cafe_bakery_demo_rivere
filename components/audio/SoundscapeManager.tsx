@@ -3,7 +3,7 @@
 /**
  * Riverè Cafe & Bakery - Spatial Soundscape Manager & French Cafe Piano Audio
  * File: components/audio/SoundscapeManager.tsx
- * Description: Relaxing French bakery solo piano music (Erik Satie style) with Web Audio fallback synthesizer, 1.5s fade-in, and brass shop door chime SFX.
+ * Description: Relaxing French bakery solo piano music (Erik Satie style), 0.25 volume, 1.5s fade-in, 1.0s fade-out, and brass shop door chime SFX.
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -15,6 +15,10 @@ interface SoundscapeManagerProps {
 
 // Public Domain French Vintage Solo Piano Track (Gymnopédie No. 1)
 const PIANO_AUDIO_URL = 'https://upload.wikimedia.org/wikipedia/commons/3/34/Erik_Satie_-_gymnopedie_no_1.mp3';
+
+const TARGET_PIANO_VOLUME = 0.25;
+const FADE_IN_SECONDS = 1.5;
+const FADE_OUT_SECONDS = 1.0;
 
 // Global references for external triggers
 let globalDoorChimeTrigger: (() => void) | null = null;
@@ -56,9 +60,9 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
       masterGain.connect(ctx.destination);
       masterGainRef.current = masterGain;
 
-      // Piano Gain (Default 0.30)
+      // Piano Gain (Starts at 0 for smooth 1.5s fade-in)
       const pianoGain = ctx.createGain();
-      pianoGain.gain.setValueAtTime(0, ctx.currentTime); // Starts at 0 for fade-in
+      pianoGain.gain.setValueAtTime(0, ctx.currentTime);
       pianoGain.connect(masterGain);
       pianoGainNodeRef.current = pianoGain;
 
@@ -67,6 +71,7 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
       audio.src = PIANO_AUDIO_URL;
       audio.crossOrigin = 'anonymous';
       audio.loop = true;
+      audio.preload = 'auto';
       audio.volume = 1.0; // Volume controlled via Web Audio GainNode
       audioElemRef.current = audio;
 
@@ -87,7 +92,30 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
   }, []);
 
   // ---------------------------------------------------------------------------
-  // 2. SYNTHESIZED BRASS SHOP DOOR CHIME SFX
+  // 2. UNLOCK AUDIO ON FIRST USER INTERACTION (BROWSER AUTOPLAY POLICY)
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const unlockAudioContext = () => {
+      if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume().then(() => {
+          console.log('[Riverè Audio]: AudioContext unlocked via user interaction.');
+        });
+      }
+    };
+
+    window.addEventListener('click', unlockAudioContext, { capture: true, once: true });
+    window.addEventListener('touchstart', unlockAudioContext, { capture: true, once: true });
+    window.addEventListener('keydown', unlockAudioContext, { capture: true, once: true });
+
+    return () => {
+      window.removeEventListener('click', unlockAudioContext, { capture: true });
+      window.removeEventListener('touchstart', unlockAudioContext, { capture: true });
+      window.removeEventListener('keydown', unlockAudioContext, { capture: true });
+    };
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // 3. SYNTHESIZED BRASS SHOP DOOR CHIME SFX
   // ---------------------------------------------------------------------------
   const playBrassDoorChime = useCallback(() => {
     let ctx = audioCtxRef.current;
@@ -128,7 +156,7 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
   }, [playBrassDoorChime]);
 
   // ---------------------------------------------------------------------------
-  // 3. PROCEDURAL VINTAGE FRENCH PIANO SYNTHESIZER FALLBACK
+  // 4. PROCEDURAL VINTAGE FRENCH PIANO SYNTHESIZER FALLBACK (PURE SINE CHORDS)
   // ---------------------------------------------------------------------------
   const startPianoSynthFallback = useCallback(() => {
     if (!audioCtxRef.current || !pianoGainNodeRef.current) return;
@@ -174,14 +202,14 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
   }, []);
 
   // ---------------------------------------------------------------------------
-  // 4. SMOOTH 1.5s FADE-IN & 1.0s FADE-OUT CONTROLS
+  // 5. SMOOTH 1.5s FADE-IN & 1.0s FADE-OUT CONTROLS (TARGET VOLUME 0.25)
   // ---------------------------------------------------------------------------
-  const fadeInPiano = (ctx: AudioContext, targetVol = 0.3) => {
+  const fadeInPiano = (ctx: AudioContext, targetVol = TARGET_PIANO_VOLUME) => {
     if (!pianoGainNodeRef.current) return;
     const now = ctx.currentTime;
     pianoGainNodeRef.current.gain.cancelScheduledValues(now);
     pianoGainNodeRef.current.gain.setValueAtTime(pianoGainNodeRef.current.gain.value, now);
-    pianoGainNodeRef.current.gain.linearRampToValueAtTime(targetVol, now + 1.5);
+    pianoGainNodeRef.current.gain.linearRampToValueAtTime(targetVol, now + FADE_IN_SECONDS);
   };
 
   const fadeOutPiano = (ctx: AudioContext, onComplete?: () => void) => {
@@ -189,15 +217,15 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
     const now = ctx.currentTime;
     pianoGainNodeRef.current.gain.cancelScheduledValues(now);
     pianoGainNodeRef.current.gain.setValueAtTime(pianoGainNodeRef.current.gain.value, now);
-    pianoGainNodeRef.current.gain.linearRampToValueAtTime(0.0001, now + 1.0);
+    pianoGainNodeRef.current.gain.linearRampToValueAtTime(0.0001, now + FADE_OUT_SECONDS);
 
     if (onComplete) {
-      setTimeout(onComplete, 1050);
+      setTimeout(onComplete, FADE_OUT_SECONDS * 1000 + 50);
     }
   };
 
   // ---------------------------------------------------------------------------
-  // 5. AUDIO PLAYBACK TOGGLE & BROWSER GESTURE POLICY
+  // 6. AUDIO PLAYBACK TOGGLE & BROWSER GESTURE POLICY
   // ---------------------------------------------------------------------------
   const toggleAudio = async () => {
     let ctx = audioCtxRef.current;
@@ -212,15 +240,15 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
     }
 
     if (isPlaying) {
-      // Fade-out piano & pause
+      // Fade-out piano & pause over 1.0s
       fadeOutPiano(ctx, () => {
         if (audioElemRef.current) audioElemRef.current.pause();
         if (synthTimerRef.current) clearTimeout(synthTimerRef.current);
         setIsPlaying(false);
       });
     } else {
-      // Fade-in piano & play
-      fadeInPiano(ctx, 0.3);
+      // Fade-in piano over 1.5s to 0.25 volume
+      fadeInPiano(ctx, TARGET_PIANO_VOLUME);
       if (audioElemRef.current) {
         audioElemRef.current
           .play()

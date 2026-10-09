@@ -155,6 +155,7 @@ export function ParchmentFlipbook() {
 
       // Synchronously lock interactions during flip transition
       isFlippingRef.current = true;
+      setIsFlipping(true);
       playPaperRustleSFX();
 
       const isForward = targetIndex > currentIdx;
@@ -175,8 +176,7 @@ export function ParchmentFlipbook() {
       const ctx = gsap.context(() => {
         const tl = gsap.timeline({
           onComplete: () => {
-            // Strictly update React state on animation complete to prevent VDOM recalculation during 3D transforms
-            setActiveSpreadIndex(targetIndex);
+            // Strictly reset element transforms after flip completion
             gsap.set(flippingPage, {
               rotateY: 0,
               translateZ: 0,
@@ -192,25 +192,36 @@ export function ParchmentFlipbook() {
 
         activeTlRef.current = tl;
 
-        // Phase 1: Lift & Arc (0% to 50%)
+        // Phase 1: Lift & Arc (0deg -> -90deg edge-on)
         tl.to(flippingPage, {
           rotateY: isForward ? -90 : 90,
-          translateZ: 40,
-          skewY: isForward ? -3 : 3,
-          duration: 0.35,
+          translateZ: 45,
+          skewY: isForward ? -4 : 4,
+          duration: 0.32,
           ease: 'power2.in',
           transformOrigin: isForward ? 'left center' : 'right center',
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.45)',
+          onComplete: () => {
+            // Swap content at the apex of flip when edge-on to viewer
+            setActiveSpreadIndex(targetIndex);
+          },
         })
-          // Phase 2: Settle & Flatten (50% to 100%)
-          .to(flippingPage, {
-            rotateY: 0,
-            translateZ: 0,
-            skewY: 0,
-            duration: 0.35,
-            ease: 'power2.out',
-            boxShadow: '0 0 0 rgba(0, 0, 0, 0)',
-          });
+          // Phase 2: Settle & Flatten (90deg -> 0deg)
+          .fromTo(
+            flippingPage,
+            {
+              rotateY: isForward ? 90 : -90,
+              skewY: isForward ? 4 : -4,
+            },
+            {
+              rotateY: 0,
+              translateZ: 0,
+              skewY: 0,
+              duration: 0.32,
+              ease: 'power2.out',
+              boxShadow: '0 0 0 rgba(0, 0, 0, 0)',
+            }
+          );
       }, bookSpreadRef);
     },
     [chapters.length]
@@ -219,6 +230,7 @@ export function ParchmentFlipbook() {
   const handleNextPage = useCallback(
     (e?: React.MouseEvent) => {
       if (e) e.stopPropagation();
+      if (isFlippingRef.current) return;
       if (activeSpreadIndexRef.current < chapters.length - 1) {
         flipToSpread(activeSpreadIndexRef.current + 1);
       }
@@ -229,6 +241,7 @@ export function ParchmentFlipbook() {
   const handlePrevPage = useCallback(
     (e?: React.MouseEvent) => {
       if (e) e.stopPropagation();
+      if (isFlippingRef.current) return;
       if (activeSpreadIndexRef.current > 0) {
         flipToSpread(activeSpreadIndexRef.current - 1);
       }
@@ -511,11 +524,15 @@ export function ParchmentFlipbook() {
 
                       {/* Allergens Badges */}
                       {item.allergens && item.allergens.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1.5">
+                        <div
+                          className="flex flex-wrap gap-1 mt-1.5"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {item.allergens.map((alg, i) => (
                             <span
                               key={i}
-                              className="px-2 py-0.5 rounded bg-amber-900/10 text-[9px] uppercase tracking-wider text-amber-900 font-medium"
+                              onClick={(e) => e.stopPropagation()}
+                              className="px-2 py-0.5 rounded bg-amber-900/10 text-[9px] uppercase tracking-wider text-amber-900 font-medium cursor-default"
                             >
                               Contains: {alg}
                             </span>

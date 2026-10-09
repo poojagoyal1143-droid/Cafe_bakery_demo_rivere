@@ -337,18 +337,19 @@ export function StreetWalkthrough() {
     triggerDoorChime();
 
     const executeScrollNavigation = () => {
-      const hearthSection = document.getElementById('hearth-section');
-      if (hearthSection) {
-        if ((window as any).lenis) {
-          (window as any).lenis.scrollTo(hearthSection, { offset: 0, duration: 1.6 });
-        } else {
-          hearthSection.scrollIntoView({ behavior: 'smooth' });
-        }
+      const lenis = (window as any).lenis;
+      if (lenis && typeof lenis.scrollTo === 'function') {
+        lenis.scrollTo('#hearth-section', { duration: 1.5 });
       } else {
-        window.scrollTo({
-          top: window.innerHeight * 2.5,
-          behavior: 'smooth',
-        });
+        const hearthSection = document.getElementById('hearth-section');
+        if (hearthSection) {
+          hearthSection.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          window.scrollTo({
+            top: window.innerHeight * 2.5,
+            behavior: 'smooth',
+          });
+        }
       }
     };
 
@@ -481,12 +482,13 @@ export function StreetWalkthrough() {
         {/* 6. INTERACTIVE FRONT DOOR ENTRANCE PROMPT */}
         <div
           ref={doorPromptRef}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 opacity-0 scale-90 pointer-events-auto transition-transform duration-300"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 opacity-0 scale-90 pointer-events-auto transition-transform duration-300"
         >
           <button
             type="button"
             onClick={handleEnterBakery}
-            className="group relative inline-flex items-center gap-3 px-8 py-4 rounded-full bg-amber-500 text-stone-950 font-semibold tracking-wider uppercase text-xs sm:text-sm shadow-[0_0_50px_rgba(226,168,85,0.7)] hover:shadow-[0_0_70px_rgba(226,168,85,0.95)] hover:bg-amber-400 transform hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer pointer-events-auto"
+            className="group relative inline-flex items-center gap-3 px-8 py-4 rounded-full bg-amber-500 text-stone-950 font-semibold tracking-wider uppercase text-xs sm:text-sm shadow-[0_0_50px_rgba(226,168,85,0.7)] hover:shadow-[0_0_70px_rgba(226,168,85,0.95)] hover:bg-amber-400 transform hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer pointer-events-auto z-40"
+            aria-label="Step Inside the Bakery"
           >
             <LogIn className="w-4 h-4 text-stone-950 transition-transform group-hover:translate-x-0.5" />
             <span>Step Inside the Bakery</span>
