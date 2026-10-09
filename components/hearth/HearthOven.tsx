@@ -193,6 +193,8 @@ export function HearthOven() {
           end: '+=300%',
           pin: true,
           scrub: 1,
+          anticipatePin: 1,
+          fastScrollEnd: true,
           invalidateOnRefresh: true,
         },
       });
@@ -276,7 +278,7 @@ export function HearthOven() {
         <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 backdrop-blur-md mb-2">
           <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
           <span className="text-[11px] uppercase tracking-[0.3em] text-amber-300 font-semibold">
-            Scene 2: The Hearth Oven
+            The Artisan Hearth
           </span>
         </div>
         <h2 className="font-serif-luxury text-4xl sm:text-5xl md:text-6xl text-amber-100 font-semibold tracking-tight amber-glow-text">
@@ -372,7 +374,7 @@ export function HearthOven() {
             </div>
 
             <span className="text-xs uppercase tracking-[0.3em] text-amber-300 font-medium">
-              Scene 3 Preview
+              Explore Bakery Menu
             </span>
 
             <h3 className="font-serif-luxury text-3xl sm:text-4xl text-stone-100 font-semibold mt-3 mb-4 amber-glow-text">

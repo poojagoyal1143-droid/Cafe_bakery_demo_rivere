@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { HeaderNav } from '@/components/navigation/HeaderNav';
+import { SmoothScrollProvider } from '@/components/providers/SmoothScroll';
 
 export const metadata: Metadata = {
   title: 'Riverè | Artisan Bakery & Café',
@@ -24,8 +26,12 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" sizes="any" />
       </head>
       <body className="bg-stone-950 text-stone-100 antialiased selection:bg-amber-500 selection:text-stone-950">
-        {children}
+        <SmoothScrollProvider>
+          <HeaderNav />
+          {children}
+        </SmoothScrollProvider>
       </body>
     </html>
   );
 }
+

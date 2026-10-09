@@ -251,7 +251,7 @@ export function BistroTable() {
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-stone-900/80 border border-amber-500/30 backdrop-blur-md mb-3 shadow-lg">
           <Utensils className="w-3.5 h-3.5 text-amber-400" />
           <span className="text-xs uppercase tracking-[0.3em] text-amber-300 font-medium">
-            Scene 4 &bull; Table Seating
+            Table Seating & Reservations
           </span>
         </div>
 

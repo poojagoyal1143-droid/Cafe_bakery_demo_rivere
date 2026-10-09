@@ -157,6 +157,7 @@ export function StreetWalkthrough() {
           pin: true,
           scrub: 1,
           anticipatePin: 1,
+          fastScrollEnd: true,
           onUpdate: (self) => {
             // Toggle scroll prompt visibility as camera approaches
             if (scrollPromptRef.current) {

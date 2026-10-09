@@ -152,7 +152,7 @@ export function RecipeSpotlight() {
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-stone-900/90 border border-amber-500/30 backdrop-blur-md mb-4 shadow-lg">
           <BookOpen className="w-3.5 h-3.5 text-amber-400" />
           <span className="text-xs uppercase tracking-[0.3em] text-amber-300 font-medium">
-            Scene 5 &bull; The Baker's Journal
+            The Baker's Journal
           </span>
         </div>
 

@@ -112,20 +112,22 @@ export function ParchmentFlipbook() {
       const tl = gsap.timeline({
         onComplete: () => {
           setActiveSpreadIndex(targetIndex);
-          gsap.set(flippingPage, { rotateY: 0, opacity: 1 });
+          gsap.set(flippingPage, { rotateY: 0, opacity: 1, boxShadow: 'none' });
           setIsFlipping(false);
         },
       });
 
       tl.to(flippingPage, {
         rotateY: isForward ? -90 : 90,
-        duration: 0.28,
-        ease: 'power2.in',
+        duration: 0.4,
+        ease: 'power2.inOut',
         transformOrigin: isForward ? 'left center' : 'right center',
+        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
       }).to(flippingPage, {
         rotateY: 0,
-        duration: 0.22,
-        ease: 'power2.out',
+        duration: 0.4,
+        ease: 'power2.inOut',
+        boxShadow: '0 0 0 rgba(0, 0, 0, 0)',
       });
     }, bookSpreadRef);
   };
@@ -160,7 +162,7 @@ export function ParchmentFlipbook() {
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-stone-900/90 border border-amber-500/30 backdrop-blur-md mb-3 shadow-lg">
           <BookOpen className="w-3.5 h-3.5 text-amber-400" />
           <span className="text-xs uppercase tracking-[0.3em] text-amber-300 font-medium">
-            Scene 3 &bull; Le Menu Artisan
+            Le Menu Artisan
           </span>
         </div>
 
@@ -227,6 +229,7 @@ export function ParchmentFlipbook() {
             <div
               ref={leftPageRef}
               className="flex flex-col justify-between border-b md:border-b-0 md:border-r border-amber-900/20 pb-6 md:pb-0 md:pr-8 transform-style-3d"
+              style={{ willChange: 'transform', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
             >
               <div>
                 <div className="flex items-center justify-between mb-4 border-b border-amber-900/20 pb-3">
@@ -292,6 +295,7 @@ export function ParchmentFlipbook() {
             <div
               ref={rightPageRef}
               className="flex flex-col justify-between md:pl-4 transform-style-3d"
+              style={{ willChange: 'transform', transform: 'translate3d(0, 0, 0)', backfaceVisibility: 'hidden' }}
             >
               <div>
                 <div className="flex items-center justify-between mb-4 border-b border-amber-900/20 pb-3">
