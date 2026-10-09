@@ -52,6 +52,22 @@ html, body {
   );
 }
 
+/* 3D Flip & Parchment Utilities */
+.perspective-1400 {
+  perspective: 1400px;
+}
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+.backface-hidden {
+  backface-visibility: hidden;
+}
+.parchment-texture {
+  background-color: #f4eedd;
+  background-image: radial-gradient(#e5dcb8 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
