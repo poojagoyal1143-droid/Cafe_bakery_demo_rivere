@@ -83,6 +83,14 @@ export function ParchmentFlipbook() {
   const [isFlipping, setIsFlipping] = useState(false);
   const [isCornerHovered, setIsCornerHovered] = useState<'left' | 'right' | null>(null);
 
+  // Synchronous refs for smooth 60fps animations decoupled from React render loops
+  const isFlippingRef = useRef(false);
+  const activeSpreadIndexRef = useRef(activeSpreadIndex);
+
+  useEffect(() => {
+    activeSpreadIndexRef.current = activeSpreadIndex;
+  }, [activeSpreadIndex]);
+
   // Group items into 4 distinct spreads/chapters
   const chapters: MenuChapter[] = [
     {
@@ -131,71 +139,108 @@ export function ParchmentFlipbook() {
   }, []);
 
   // ---------------------------------------------------------------------------
-  // 1. ORGANIC 3D SKEUOMORPHIC PAGE-TURN PHYSICS (GSAP TIMELINE)
+  // 1. ORGANIC 3D SKEUOMORPHIC PAGE-TURN PHYSICS (DECOUPLED GSAP TIMELINE)
   // ---------------------------------------------------------------------------
-  const flipToSpread = (targetIndex: number) => {
-    if (targetIndex === activeSpreadIndex || isFlipping || targetIndex < 0 || targetIndex >= chapters.length) {
-      return;
-    }
+  const flipToSpread = useCallback(
+    (targetIndex: number) => {
+      const currentIdx = activeSpreadIndexRef.current;
+      if (
+        targetIndex === currentIdx ||
+        isFlippingRef.current ||
+        targetIndex < 0 ||
+        targetIndex >= chapters.length
+      ) {
+        return;
+      }
 
-    setIsFlipping(true);
-    playPaperRustleSFX();
+      // Synchronously lock interactions during flip transition
+      isFlippingRef.current = true;
+      playPaperRustleSFX();
 
-    const isForward = targetIndex > activeSpreadIndex;
-    const flippingPage = isForward ? rightPageRef.current : leftPageRef.current;
-    const isMobile = window.innerWidth < 768;
+      const isForward = targetIndex > currentIdx;
+      const flippingPage = isForward ? rightPageRef.current : leftPageRef.current;
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
-    if (!flippingPage || isMobile) {
-      // Mobile fallback: crisp slide animation
-      setActiveSpreadIndex(targetIndex);
-      setIsFlipping(false);
-      return;
-    }
+      if (!flippingPage || isMobile) {
+        // Mobile fallback: crisp instant spread switch
+        setActiveSpreadIndex(targetIndex);
+        isFlippingRef.current = false;
+        setIsFlipping(false);
+        return;
+      }
 
-    const ctx = gsap.context(() => {
-      const tl = gsap.timeline({
-        onComplete: () => {
-          setActiveSpreadIndex(targetIndex);
-          gsap.set(flippingPage, {
+      // Lock pointer events on flipping leaf to prevent hover repaints during 60fps transform
+      gsap.set(flippingPage, { pointerEvents: 'none' });
+
+      const ctx = gsap.context(() => {
+        const tl = gsap.timeline({
+          onComplete: () => {
+            // Strictly update React state on animation complete to prevent VDOM recalculation during 3D transforms
+            setActiveSpreadIndex(targetIndex);
+            gsap.set(flippingPage, {
+              rotateY: 0,
+              translateZ: 0,
+              skewY: 0,
+              opacity: 1,
+              boxShadow: 'none',
+              pointerEvents: 'auto',
+            });
+            isFlippingRef.current = false;
+            setIsFlipping(false);
+          },
+        });
+
+        activeTlRef.current = tl;
+
+        // Phase 1: Lift & Arc (0% to 50%)
+        tl.to(flippingPage, {
+          rotateY: isForward ? -90 : 90,
+          translateZ: 40,
+          skewY: isForward ? -3 : 3,
+          duration: 0.35,
+          ease: 'power2.in',
+          transformOrigin: isForward ? 'left center' : 'right center',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.45)',
+        })
+          // Phase 2: Settle & Flatten (50% to 100%)
+          .to(flippingPage, {
             rotateY: 0,
             translateZ: 0,
             skewY: 0,
-            opacity: 1,
-            boxShadow: 'none',
+            duration: 0.35,
+            ease: 'power2.out',
+            boxShadow: '0 0 0 rgba(0, 0, 0, 0)',
           });
-          setIsFlipping(false);
-        },
-      });
+      }, bookSpreadRef);
+    },
+    [chapters.length]
+  );
 
-      activeTlRef.current = tl;
+  const handleNextPage = useCallback(
+    (e?: React.MouseEvent) => {
+      if (e) e.stopPropagation();
+      if (activeSpreadIndexRef.current < chapters.length - 1) {
+        flipToSpread(activeSpreadIndexRef.current + 1);
+      }
+    },
+    [chapters.length, flipToSpread]
+  );
 
-      // Phase 1: Lift & Arc (0% to 50%)
-      tl.to(flippingPage, {
-        rotateY: isForward ? -90 : 90,
-        translateZ: 40,
-        skewY: isForward ? -3 : 3,
-        duration: 0.425,
-        ease: 'power2.in',
-        transformOrigin: isForward ? 'left center' : 'right center',
-        boxShadow: '0 20px 40px rgba(0, 0, 0, 0.45)',
-      })
-        // Phase 2: Settle & Flatten (50% to 100%)
-        .to(flippingPage, {
-          rotateY: 0,
-          translateZ: 0,
-          skewY: 0,
-          duration: 0.425,
-          ease: 'power2.out',
-          boxShadow: '0 0 0 rgba(0, 0, 0, 0)',
-        });
-    }, bookSpreadRef);
-  };
+  const handlePrevPage = useCallback(
+    (e?: React.MouseEvent) => {
+      if (e) e.stopPropagation();
+      if (activeSpreadIndexRef.current > 0) {
+        flipToSpread(activeSpreadIndexRef.current - 1);
+      }
+    },
+    [flipToSpread]
+  );
 
   // ---------------------------------------------------------------------------
   // 2. CORNER TEASER HOVER HANDLERS
   // ---------------------------------------------------------------------------
   const handleCornerHover = (side: 'left' | 'right', entering: boolean) => {
-    if (isFlipping) return;
+    if (isFlippingRef.current) return;
     setIsCornerHovered(entering ? side : null);
 
     const targetRef = side === 'right' ? rightPageRef.current : leftPageRef.current;
@@ -260,7 +305,7 @@ export function ParchmentFlipbook() {
         </h2>
 
         <p className="text-xs sm:text-sm text-stone-300 font-light tracking-wide max-w-xl mx-auto">
-          Explore our daily baking selection. Hover page corners to peel, or click any item to view details and reserve for pickup.
+          Explore our daily baking selection. Click any page half to flip spreads, or select an item to reserve for preorder.
         </p>
 
         {/* Preorder Shopping Bag Counter Indicator */}
@@ -282,9 +327,12 @@ export function ParchmentFlipbook() {
           return (
             <button
               key={chapter.id}
-              onClick={() => flipToSpread(idx)}
+              onClick={(e) => {
+                e.stopPropagation();
+                flipToSpread(idx);
+              }}
               disabled={isFlipping}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium uppercase tracking-wider transition-all duration-300 ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium uppercase tracking-wider transition-all duration-300 cursor-pointer ${
                 isActive
                   ? 'bg-amber-500 text-stone-950 shadow-[0_0_20px_rgba(226,168,85,0.5)] scale-105'
                   : 'bg-stone-900/80 text-stone-300 hover:text-amber-200 border border-stone-800 hover:border-amber-500/40 backdrop-blur-md'
@@ -314,14 +362,19 @@ export function ParchmentFlipbook() {
             {/* Center Spine Fold Shadow */}
             <div className="hidden md:block absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-12 bg-gradient-to-r from-stone-900/20 via-stone-900/40 to-stone-900/20 pointer-events-none z-20" />
 
-            {/* LEFT PAGE (Verso Chapter Overview) */}
+            {/* LEFT PAGE (Verso Chapter Overview - Dedicated Click Zone to flip back) */}
             <div
               ref={leftPageRef}
-              className="relative flex flex-col justify-between border-b md:border-b-0 md:border-r border-amber-900/20 pb-6 md:pb-0 md:pr-8 transform-style-3d"
+              onClick={handlePrevPage}
+              className={`relative flex flex-col justify-between border-b md:border-b-0 md:border-r border-amber-900/20 pb-6 md:pb-0 md:pr-8 transform-style-3d ${
+                activeSpreadIndex > 0 ? 'cursor-pointer' : 'cursor-default'
+              }`}
               style={{
+                transformStyle: 'preserve-3d',
+                backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden',
                 willChange: 'transform',
                 transform: 'translate3d(0, 0, 0)',
-                backfaceVisibility: 'hidden',
                 transformOrigin: 'right center',
               }}
               onMouseEnter={() => handleCornerHover('left', true)}
@@ -348,7 +401,10 @@ export function ParchmentFlipbook() {
                 {/* Primary Highlight Featured Item Card */}
                 {currentChapter.items[0] && (
                   <div
-                    onClick={() => setSelectedItem(currentChapter.items[0])}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedItem(currentChapter.items[0]);
+                    }}
                     className="cursor-pointer group relative rounded-xl bg-[#e9e2cb] border border-amber-800/30 p-4 mb-4 hover:shadow-md transition-all duration-300"
                   >
                     <div className="relative w-full h-36 rounded-lg overflow-hidden mb-3">
@@ -388,7 +444,10 @@ export function ParchmentFlipbook() {
 
                 {activeSpreadIndex > 0 && (
                   <span
-                    onClick={() => flipToSpread(activeSpreadIndex - 1)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePrevPage(e);
+                    }}
                     className="cursor-pointer text-[9px] uppercase tracking-wider text-amber-800 font-bold bg-amber-900/10 px-2 py-1 rounded hover:bg-amber-900/20 transition-colors hidden md:inline-block"
                   >
                     &laquo; Turn Back
@@ -397,14 +456,19 @@ export function ParchmentFlipbook() {
               </div>
             </div>
 
-            {/* RIGHT PAGE (Recto Line Items) */}
+            {/* RIGHT PAGE (Recto Line Items - Dedicated Click Zone to advance forward) */}
             <div
               ref={rightPageRef}
-              className="relative flex flex-col justify-between md:pl-4 transform-style-3d"
+              onClick={handleNextPage}
+              className={`relative flex flex-col justify-between md:pl-4 transform-style-3d ${
+                activeSpreadIndex < chapters.length - 1 ? 'cursor-pointer' : 'cursor-default'
+              }`}
               style={{
+                transformStyle: 'preserve-3d',
+                backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden',
                 willChange: 'transform',
                 transform: 'translate3d(0, 0, 0)',
-                backfaceVisibility: 'hidden',
                 transformOrigin: 'left center',
               }}
               onMouseEnter={() => handleCornerHover('right', true)}
@@ -425,7 +489,10 @@ export function ParchmentFlipbook() {
                   {currentChapter.items.map((item) => (
                     <div
                       key={item.id}
-                      onClick={() => setSelectedItem(item)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedItem(item);
+                      }}
                       className="group cursor-pointer p-3 rounded-lg hover:bg-[#e9e2cb]/80 border border-transparent hover:border-amber-800/30 transition-all duration-300"
                     >
                       <div className="flex items-baseline justify-between">
@@ -463,9 +530,12 @@ export function ParchmentFlipbook() {
               {/* Bottom Pagination Control Triggers */}
               <div className="flex items-center justify-between pt-6 border-t border-amber-900/20 mt-4">
                 <button
-                  onClick={() => flipToSpread(activeSpreadIndex - 1)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePrevPage(e);
+                  }}
                   disabled={activeSpreadIndex === 0 || isFlipping}
-                  className="flex items-center gap-1 text-xs text-amber-900 font-medium disabled:opacity-30 hover:text-amber-700 transition-colors"
+                  className="flex items-center gap-1 text-xs text-amber-900 font-medium disabled:opacity-30 hover:text-amber-700 transition-colors cursor-pointer"
                 >
                   <ChevronLeft className="w-4 h-4" />
                   <span>Previous Spread</span>
@@ -476,9 +546,12 @@ export function ParchmentFlipbook() {
                 </span>
 
                 <button
-                  onClick={() => flipToSpread(activeSpreadIndex + 1)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleNextPage(e);
+                  }}
                   disabled={activeSpreadIndex === chapters.length - 1 || isFlipping}
-                  className="flex items-center gap-1 text-xs text-amber-900 font-medium disabled:opacity-30 hover:text-amber-700 transition-colors"
+                  className="flex items-center gap-1 text-xs text-amber-900 font-medium disabled:opacity-30 hover:text-amber-700 transition-colors cursor-pointer"
                 >
                   <span>Next Spread</span>
                   <ChevronRight className="w-4 h-4" />
