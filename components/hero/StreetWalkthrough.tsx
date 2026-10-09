@@ -213,6 +213,12 @@ export function StreetWalkthrough() {
     if (!containerRef.current) return;
 
     const ctx = gsap.context(() => {
+      // Set explicit initial GSAP states to prevent initial black screen flicker or asset jumps
+      if (bgStreetRef.current) gsap.set(bgStreetRef.current, { scale: 1.0, autoAlpha: 1 });
+      if (facadeRef.current) gsap.set(facadeRef.current, { scale: 0.85, autoAlpha: 1 });
+      if (brandEmblemRef.current) gsap.set(brandEmblemRef.current, { autoAlpha: 1, y: 0 });
+      if (doorPromptRef.current) gsap.set(doorPromptRef.current, { autoAlpha: 0, scale: 0.9, pointerEvents: 'none' });
+
       const tl = gsap.timeline({
         scrollTrigger: {
           trigger: containerRef.current,
@@ -246,7 +252,7 @@ export function StreetWalkthrough() {
         0
       );
 
-      // 3.2 Zoom cafe facade from 0.82 to 1.5 with sharp clarity
+      // 3.2 Zoom cafe facade from 0.85 to 1.5 with sharp clarity
       tl.to(
         facadeRef.current,
         {
@@ -259,11 +265,11 @@ export function StreetWalkthrough() {
         0
       );
 
-      // 3.3 Fade out brand title emblem
+      // 3.3 Fade out brand title emblem using autoAlpha
       tl.to(
         brandEmblemRef.current,
         {
-          opacity: 0,
+          autoAlpha: 0,
           y: -50,
           scale: 0.9,
           ease: 'power2.in',
@@ -276,7 +282,7 @@ export function StreetWalkthrough() {
       tl.to(
         godRayRef.current,
         {
-          opacity: 0.85,
+          autoAlpha: 0.85,
           scale: 1.4,
           ease: 'power2.out',
           duration: 1,
@@ -288,7 +294,7 @@ export function StreetWalkthrough() {
       tl.to(
         amberGlowRef.current,
         {
-          opacity: 0.95,
+          autoAlpha: 0.95,
           scale: 1.3,
           ease: 'power2.out',
           duration: 1,
@@ -300,7 +306,7 @@ export function StreetWalkthrough() {
       tl.to(
         rainCanvasRef.current,
         {
-          opacity: 0.25,
+          autoAlpha: 0.25,
           ease: 'power1.inOut',
           duration: 0.8,
         },
@@ -311,7 +317,7 @@ export function StreetWalkthrough() {
       tl.to(
         doorPromptRef.current,
         {
-          opacity: 1,
+          autoAlpha: 1,
           scale: 1,
           pointerEvents: 'auto',
           ease: 'back.out(1.7)',
@@ -319,6 +325,8 @@ export function StreetWalkthrough() {
         },
         0.72
       );
+
+      ScrollTrigger.refresh();
     }, containerRef);
 
     return () => ctx.revert();
@@ -335,16 +343,16 @@ export function StreetWalkthrough() {
     if (flashOverlayRef.current && perspectiveWrapperRef.current) {
       gsap.to(perspectiveWrapperRef.current, {
         scale: 1.8,
-        opacity: 0,
+        autoAlpha: 0,
         duration: 0.9,
         ease: 'power3.in',
       });
 
       gsap.fromTo(
         flashOverlayRef.current,
-        { opacity: 0 },
+        { autoAlpha: 0 },
         {
-          opacity: 1,
+          autoAlpha: 1,
           duration: 0.5,
           yoyo: true,
           repeat: 1,
@@ -368,8 +376,8 @@ export function StreetWalkthrough() {
   return (
     <section
       ref={containerRef}
-      className="relative h-screen w-full overflow-hidden bg-stone-950 select-none perspective-1400"
-      aria-label="Scene 1: Rainy Street Walkthrough"
+      className="relative h-screen w-full overflow-hidden bg-[#0d0c0a] select-none perspective-1400"
+      aria-label="Rainy Street Walkthrough"
     >
       {/* 3D PERSPECTIVE WRAPPER FOR MOUSE TILT */}
       <div
@@ -386,6 +394,7 @@ export function StreetWalkthrough() {
             alt="Rainy Parisian cobblestone street leading to Riverè Cafe"
             fill
             priority
+            loading="eager"
             sizes="100vw"
             className="object-cover object-center brightness-[0.85] contrast-[1.05]"
           />
@@ -396,7 +405,7 @@ export function StreetWalkthrough() {
         {/* 2. FOREGROUND CAFE STOREFRONT FACADE LAYER */}
         <div
           ref={facadeRef}
-          className="absolute inset-0 flex items-center justify-center transform-gpu will-change-transform scale-[0.82]"
+          className="absolute inset-0 flex items-center justify-center transform-gpu will-change-transform scale-[0.85]"
         >
           <div className="relative w-full max-w-6xl h-[85vh] mx-auto px-4">
             <Image
@@ -404,6 +413,7 @@ export function StreetWalkthrough() {
               alt="Riverè Cafe & Bakery Warm Storefront Entrance"
               fill
               priority
+              loading="eager"
               sizes="(max-width: 1200px) 100vw, 1200px"
               className="object-contain object-center drop-shadow-[0_25px_60px_rgba(0,0,0,0.95)]"
             />

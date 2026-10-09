@@ -50,7 +50,7 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
   // 1. WEB AUDIO SYNTHESIS SETUP (RAIN & FIRE CRACKLE & BRASS CHIME)
   // ---------------------------------------------------------------------------
   const initAudioEngine = useCallback(() => {
-    if (audioCtxRef.current) return;
+    if (audioCtxRef.current) return audioCtxRef.current;
 
     try {
       const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -133,8 +133,10 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
 
       playCracklePop();
       setIsAudioInitialized(true);
+      return ctx;
     } catch (err) {
       console.warn('[Riverè Audio Engine Notice]: Web Audio API unavailable in current environment.', err);
+      return null;
     }
   }, []);
 
@@ -142,19 +144,21 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
   // 2. SYNTHESIZED BRASS SHOP DOOR CHIME SFX
   // ---------------------------------------------------------------------------
   const playBrassDoorChime = useCallback(() => {
-    if (!audioCtxRef.current || !masterGainRef.current) return;
-    const ctx = audioCtxRef.current;
+    let ctx = audioCtxRef.current;
+    if (!ctx) {
+      ctx = initAudioEngine();
+    }
+    if (!ctx || !masterGainRef.current) return;
+
     if (ctx.state === 'suspended') {
-      ctx.resume();
+      ctx.resume().then(() => console.log('[Audio] Initialized & Playing'));
     }
 
     const now = ctx.currentTime;
-
-    // Dual resonant chime frequencies (E5 & B5 harmonics)
     const freqs = [659.25, 987.77, 1318.51];
     freqs.forEach((freq, idx) => {
-      const osc = ctx.createOscillator();
-      const chimeGain = ctx.createGain();
+      const osc = ctx!.createOscillator();
+      const chimeGain = ctx!.createGain();
 
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, now + idx * 0.08);
@@ -168,7 +172,7 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
       osc.start(now + idx * 0.08);
       osc.stop(now + idx * 0.08 + 2.0);
     });
-  }, []);
+  }, [initAudioEngine]);
 
   // Register global triggers
   useEffect(() => {
@@ -217,49 +221,63 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
   }, [scrollProgress, handleScrollProgress]);
 
   // ---------------------------------------------------------------------------
-  // 4. AUTOPLAY RESUME & TAB VISIBILITY MEMORY SAFETY
+  // 4. BROWSER GESTURE POLICY & RESUME HANDLER
   // ---------------------------------------------------------------------------
-  const toggleAudio = () => {
-    if (!isAudioInitialized) {
-      initAudioEngine();
+  const toggleAudio = async () => {
+    let ctx = audioCtxRef.current;
+    if (!ctx) {
+      ctx = initAudioEngine();
     }
 
-    if (audioCtxRef.current) {
-      if (audioCtxRef.current.state === 'suspended') {
-        audioCtxRef.current.resume();
-        setIsPlaying(true);
-      } else if (isPlaying) {
-        audioCtxRef.current.suspend();
-        setIsPlaying(false);
-      } else {
-        audioCtxRef.current.resume();
-        setIsPlaying(true);
+    if (ctx) {
+      try {
+        if (ctx.state === 'suspended') {
+          await ctx.resume();
+          setIsPlaying(true);
+          console.log('[Audio] Initialized & Playing');
+        } else if (isPlaying) {
+          await ctx.suspend();
+          setIsPlaying(false);
+        } else {
+          await ctx.resume();
+          setIsPlaying(true);
+          console.log('[Audio] Initialized & Playing');
+        }
+      } catch (err) {
+        console.warn('[Audio] Failed to toggle playback:', err);
       }
     }
   };
 
-  // Pause audio when browser tab is hidden
+  // Pause audio when browser tab is hidden & handle gesture resume
   useEffect(() => {
-    const handleVisibilityChange = () => {
+    const handleVisibilityChange = async () => {
       if (document.hidden && audioCtxRef.current && audioCtxRef.current.state === 'running') {
-        audioCtxRef.current.suspend();
+        await audioCtxRef.current.suspend();
         setIsPlaying(false);
       }
     };
 
-    // Global click listener to resume AudioContext if browser blocked autoplay
-    const handleFirstClick = () => {
-      if (audioCtxRef.current && audioCtxRef.current.state === 'suspended' && isPlaying) {
-        audioCtxRef.current.resume();
+    const handleFirstUserInteraction = async () => {
+      if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+        try {
+          await audioCtxRef.current.resume();
+          setIsPlaying(true);
+          console.log('[Audio] Initialized & Playing');
+        } catch (err) {
+          console.warn('[Audio] First gesture resume caught:', err);
+        }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('click', handleFirstClick, { once: true });
+    window.addEventListener('click', handleFirstUserInteraction, { once: true });
+    window.addEventListener('touchstart', handleFirstUserInteraction, { once: true });
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('click', handleFirstClick);
+      window.removeEventListener('click', handleFirstUserInteraction);
+      window.removeEventListener('touchstart', handleFirstUserInteraction);
       if (crackleTimerRef.current) {
         clearTimeout(crackleTimerRef.current);
       }
@@ -267,7 +285,7 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
         audioCtxRef.current.close();
       }
     };
-  }, [isPlaying]);
+  }, []);
 
   return (
     <div className="fixed top-24 right-6 z-40 select-none">
@@ -276,14 +294,13 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
         className={`group px-3.5 py-2 rounded-full border backdrop-blur-xl transition-all duration-300 flex items-center gap-2.5 shadow-xl ${
           isPlaying
             ? 'bg-amber-500/20 border-amber-500/50 text-amber-200 shadow-[0_0_20px_rgba(226,168,85,0.4)]'
-            : 'bg-stone-950/70 border-stone-800 text-stone-400 hover:text-amber-300 hover:border-amber-500/30'
+            : 'bg-stone-950/80 border-stone-800 text-stone-300 hover:text-amber-300 hover:border-amber-500/40'
         }`}
         aria-label="Toggle Spatial Audio Soundscape"
       >
         {isPlaying ? (
           <>
             <Volume2 className="w-4 h-4 text-amber-400 animate-pulse" />
-            {/* Animated Soundwave SVG Bars */}
             <div className="flex items-end gap-0.5 h-3.5 px-0.5">
               <span className="w-0.5 bg-amber-400 rounded-full h-full animate-bounce [animation-delay:-0.3s]" />
               <span className="w-0.5 bg-amber-400 rounded-full h-3/4 animate-bounce [animation-delay:-0.15s]" />
@@ -293,8 +310,8 @@ export function SoundscapeManager({ scrollProgress = 0 }: SoundscapeManagerProps
           </>
         ) : (
           <>
-            <VolumeX className="w-4 h-4 text-stone-400 group-hover:text-amber-400 transition-colors" />
-            <span className="text-[10px] uppercase tracking-wider font-semibold">Audio Off</span>
+            <VolumeX className="w-4 h-4 text-amber-400/80 group-hover:text-amber-400 transition-colors" />
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-stone-300">Enable Sound</span>
           </>
         )}
       </button>
