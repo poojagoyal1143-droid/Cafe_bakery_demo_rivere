@@ -2,6 +2,7 @@ import React from 'react';
 import { StreetWalkthrough } from '@/components/hero/StreetWalkthrough';
 import { HearthOven } from '@/components/hearth/HearthOven';
 import { ParchmentFlipbook } from '@/components/menu/ParchmentFlipbook';
+import { BistroTable } from '@/components/reservation/BistroTable';
 
 export default function HomePage() {
   return (
@@ -14,6 +15,10 @@ export default function HomePage() {
 
       {/* SCENE 3: THE PARCHMENT FLIPBOOK MENU */}
       <ParchmentFlipbook />
+
+      {/* SCENE 4: THE BISTRO TABLE & INTERACTIVE RESERVATION SYSTEM */}
+      <BistroTable />
     </main>
   );
 }
+
