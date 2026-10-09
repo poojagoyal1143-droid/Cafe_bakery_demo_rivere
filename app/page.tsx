@@ -3,6 +3,8 @@ import { StreetWalkthrough } from '@/components/hero/StreetWalkthrough';
 import { HearthOven } from '@/components/hearth/HearthOven';
 import { ParchmentFlipbook } from '@/components/menu/ParchmentFlipbook';
 import { BistroTable } from '@/components/reservation/BistroTable';
+import { RecipeSpotlight } from '@/components/recipes/RecipeSpotlight';
+import { SiteFooter } from '@/components/footer/SiteFooter';
 
 export default function HomePage() {
   return (
@@ -18,7 +20,14 @@ export default function HomePage() {
 
       {/* SCENE 4: THE BISTRO TABLE & INTERACTIVE RESERVATION SYSTEM */}
       <BistroTable />
+
+      {/* SCENE 5: THE RECIPE SPOTLIGHT & BAKER'S JOURNAL */}
+      <RecipeSpotlight />
+
+      {/* CINEMATIC BRAND FOOTER & LEGAL COMPLIANCE LAYER */}
+      <SiteFooter />
     </main>
   );
 }
+
 
